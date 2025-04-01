@@ -6,8 +6,15 @@ import { MiniKit } from '@worldcoin/minikit-js'
 export function useWallet() {
   const [isConnected, setIsConnected] = useState(false)
   const [address, setAddress] = useState<string | null>(null)
+  const [isClient, setIsClient] = useState(false)
 
   useEffect(() => {
+    // Set isClient to true once the component mounts
+    setIsClient(true)
+    
+    // Only run on client-side
+    if (typeof window === 'undefined') return;
+    
     // Check if wallet is already connected
     const checkWalletConnection = () => {
       if (MiniKit.isInstalled() && MiniKit.walletAddress) {
@@ -26,6 +33,9 @@ export function useWallet() {
   }, [])
 
   const connect = async () => {
+    // Only run on client-side
+    if (typeof window === 'undefined') return null;
+    
     // This function is called by WalletConnect component
     // after successful authentication
     if (MiniKit.walletAddress) {
@@ -37,6 +47,9 @@ export function useWallet() {
   }
 
   const disconnect = async () => {
+    // Only run on client-side
+    if (typeof window === 'undefined') return;
+    
     // Update the state
     setIsConnected(false)
     setAddress(null)
@@ -50,7 +63,7 @@ export function useWallet() {
   }
 
   return {
-    isConnected,
+    isConnected: isClient && isConnected,
     address,
     connect,
     disconnect

@@ -13,41 +13,60 @@ interface CreditScoreProps {
 }
 
 export default function CreditScore({ showAnimation, onAnimationComplete }: CreditScoreProps) {
-  const [score, setScore] = useState(0)
+  const [score, setScore] = useState<number>(0)
+  const [isClient, setIsClient] = useState(false)
   const animationCompleted = useRef(false)
   const today = format(new Date(), "MMM d, yyyy")
+  const hasInitialized = useRef(false)
 
   useEffect(() => {
-    const fetchScore = async () => {
-      const userScore = await getScore();
+    setIsClient(true)
+  }, [])
 
-      if (showAnimation && !animationCompleted.current) {
-        // Start with 0 and animate to the actual score
-        setScore(0);
+  useEffect(() => {
+    // Only fetch the score on the client side
+    if (!isClient) return;
+    
+    if (!hasInitialized.current) {
+      hasInitialized.current = true;
+      
+      const fetchScore = async () => {
+        try {
+          const userScore = await getScore();
 
-        // Animate the progress
-        let currentProgress = 0;
-        const interval = setInterval(() => {
-          if (currentProgress >= userScore) {
-            clearInterval(interval);
-            animationCompleted.current = true;
-            onAnimationComplete();
+          if (showAnimation && !animationCompleted.current) {
+            // Start with 0 and animate to the actual score
+            setScore(0);
+
+            // Animate the progress
+            let currentProgress = 0;
+            const interval = setInterval(() => {
+              if (currentProgress >= userScore) {
+                clearInterval(interval);
+                animationCompleted.current = true;
+                onAnimationComplete();
+              } else {
+                currentProgress += Math.ceil(userScore / 50); // Increment in steps
+                if (currentProgress > userScore) currentProgress = userScore;
+                setScore(currentProgress);
+              }
+            }, 40);
+
+            return () => clearInterval(interval);
           } else {
-            currentProgress += Math.ceil(userScore / 50); // Increment in steps
-            if (currentProgress > userScore) currentProgress = userScore;
-            setScore(currentProgress);
+            // If no animation, just set the score directly
+            setScore(userScore);
           }
-        }, 40);
+        } catch (error) {
+          console.error("Error fetching score:", error);
+          // Set a default score if there's an error
+          setScore(640);
+        }
+      };
 
-        return () => clearInterval(interval);
-      } else {
-        // If no animation, just set the score directly
-        setScore(userScore);
-      }
-    };
-
-    fetchScore();
-  }, [showAnimation, onAnimationComplete]);
+      fetchScore();
+    }
+  }, [showAnimation, onAnimationComplete, isClient]);
 
   // Determine score color based on value
   const getScoreColor = () => {

@@ -4,7 +4,10 @@ import {
   doc, 
   getDoc, 
   setDoc, 
-  updateDoc 
+  updateDoc, 
+  CollectionReference,
+  DocumentReference,
+  Firestore
 } from 'firebase/firestore';
 
 // User type definition
@@ -16,13 +19,44 @@ export type User = {
   metamaskConnected?: boolean;
 }
 
-// Collection reference
-const usersCollection = collection(db, 'users');
+// Check if Firebase is available
+const isFirebaseAvailable = (): boolean => {
+  return typeof window !== 'undefined' && db !== undefined;
+};
+
+// Safely get users collection
+const getUsersCollection = (): CollectionReference | null => {
+  if (!isFirebaseAvailable() || !db) {
+    return null;
+  }
+  
+  return collection(db, 'users');
+};
+
+// Safely get user document reference
+const getUserDocRef = (walletAddress: string): DocumentReference | null => {
+  const usersCollection = getUsersCollection();
+  if (!usersCollection) {
+    return null;
+  }
+  
+  return doc(usersCollection, walletAddress);
+};
 
 // Get a user by wallet address
 export async function getUser(walletAddress: string): Promise<User | null> {
   try {
-    const userDoc = await getDoc(doc(usersCollection, walletAddress));
+    // If Firebase is not available, fall back to local storage
+    if (!isFirebaseAvailable()) {
+      return getLocalUser(walletAddress);
+    }
+    
+    const docRef = getUserDocRef(walletAddress);
+    if (!docRef) {
+      return getLocalUser(walletAddress);
+    }
+    
+    const userDoc = await getDoc(docRef);
     
     if (userDoc.exists()) {
       const data = userDoc.data();
@@ -35,17 +69,30 @@ export async function getUser(walletAddress: string): Promise<User | null> {
       };
     }
     
-    return null;
+    return getLocalUser(walletAddress);
   } catch (error) {
     console.error('Error getting user:', error);
-    return null;
+    return getLocalUser(walletAddress);
   }
 }
 
 // Create or update a user
 export async function saveUser(user: User): Promise<boolean> {
   try {
-    await setDoc(doc(usersCollection, user.walletAddress), {
+    // Always try local storage first for fallback
+    saveLocalUser(user);
+    
+    // If Firebase is not available, return the local storage result
+    if (!isFirebaseAvailable()) {
+      return true;
+    }
+    
+    const docRef = getUserDocRef(user.walletAddress);
+    if (!docRef) {
+      return true; // Local storage succeeded
+    }
+    
+    await setDoc(docRef, {
       walletAddress: user.walletAddress,
       creditScore: user.creditScore,
       updatedAt: user.updatedAt,
@@ -63,7 +110,20 @@ export async function saveUser(user: User): Promise<boolean> {
 // Update a user's credit score
 export async function updateUserScore(walletAddress: string, creditScore: number): Promise<boolean> {
   try {
-    await updateDoc(doc(usersCollection, walletAddress), {
+    // Always update local storage first
+    updateLocalScore(walletAddress, creditScore);
+    
+    // If Firebase is not available, return the local storage result
+    if (!isFirebaseAvailable()) {
+      return true;
+    }
+    
+    const docRef = getUserDocRef(walletAddress);
+    if (!docRef) {
+      return true; // Local storage succeeded
+    }
+    
+    await updateDoc(docRef, {
       creditScore,
       updatedAt: new Date()
     });
@@ -79,26 +139,38 @@ export async function updateUserScore(walletAddress: string, creditScore: number
 export const getLocalUser = (walletAddress: string): User | null => {
   if (typeof localStorage === 'undefined') return null;
   
-  const score = localStorage.getItem('worldscore_score');
-  if (!score) return null;
-  
-  return {
-    walletAddress,
-    creditScore: parseInt(score, 10),
-    updatedAt: new Date()
-  };
+  try {
+    const score = localStorage.getItem('worldscore_score');
+    if (!score) return null;
+    
+    return {
+      walletAddress,
+      creditScore: parseInt(score, 10),
+      updatedAt: new Date()
+    };
+  } catch (error) {
+    return null;
+  }
 };
 
 export const saveLocalUser = (user: User): boolean => {
   if (typeof localStorage === 'undefined') return false;
   
-  localStorage.setItem('worldscore_score', user.creditScore.toString());
-  return true;
+  try {
+    localStorage.setItem('worldscore_score', user.creditScore.toString());
+    return true;
+  } catch (error) {
+    return false;
+  }
 };
 
 export const updateLocalScore = (walletAddress: string, creditScore: number): boolean => {
   if (typeof localStorage === 'undefined') return false;
   
-  localStorage.setItem('worldscore_score', creditScore.toString());
-  return true;
+  try {
+    localStorage.setItem('worldscore_score', creditScore.toString());
+    return true;
+  } catch (error) {
+    return false;
+  }
 }; 
