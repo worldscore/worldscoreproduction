@@ -37,13 +37,16 @@ export function useWallet() {
   }
 
   const disconnect = async () => {
-    // Clear cookies or local storage related to authentication
-    // For now, just update the state
+    // Update the state
     setIsConnected(false)
     setAddress(null)
     
-    // In a real implementation, you'd make a call to your backend
-    // to invalidate the session or clear cookies
+    // Clear cookies using document.cookie
+    document.cookie = 'wallet_address=; expires=Thu, 01 Jan 1970 00:00:00 UTC; path=/;';
+    document.cookie = 'siwe=; expires=Thu, 01 Jan 1970 00:00:00 UTC; path=/;';
+    
+    // Force reload the page to ensure all state is reset
+    window.location.reload();
   }
 
   return {

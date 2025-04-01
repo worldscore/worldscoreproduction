@@ -104,7 +104,24 @@ export default function Home() {
                       <p className="text-sm font-medium">Wallet Address</p>
                       <p className="text-sm text-muted-foreground break-all">{address}</p>
                     </div>
-                    <Button variant="destructive" onClick={disconnect} className="w-full mt-4">
+                    <Button 
+                      variant="destructive" 
+                      onClick={async () => {
+                        try {
+                          // First try to call server-side logout (may fail silently if endpoint doesn't exist)
+                          await fetch('/api/logout', { 
+                            method: 'POST',
+                            headers: { 'Content-Type': 'application/json' },
+                          }).catch(() => {
+                            // Ignore error if API route doesn't exist
+                          });
+                        } finally {
+                          // Always call client-side disconnect
+                          disconnect();
+                        }
+                      }} 
+                      className="w-full mt-4"
+                    >
                       Disconnect Wallet
                     </Button>
                   </CardContent>
