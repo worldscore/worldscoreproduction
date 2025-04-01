@@ -18,33 +18,35 @@ export default function CreditScore({ showAnimation, onAnimationComplete }: Cred
   const today = format(new Date(), "MMM d, yyyy")
 
   useEffect(() => {
-    const userScore = getScore()
+    const fetchAndSetScore = async () => {
+      const userScore = await getScore()
 
-    if (showAnimation && !animationCompleted.current) {
-      // Start with 0 and animate to the actual score
-      setScore(0)
+      if (showAnimation && !animationCompleted.current) {
+        // Start with 0 and animate to the actual score
+        setScore(0)
 
-      // Animate the progress
-      let currentProgress = 0
-      const interval = setInterval(() => {
-        if (currentProgress >= userScore) {
-          clearInterval(interval)
-          animationCompleted.current = true
-          onAnimationComplete()
-        } else {
-          currentProgress += Math.ceil(userScore / 50) // Increment in steps
-          if (currentProgress > userScore) currentProgress = userScore
-          setScore(currentProgress)
-          // No need to set progress state anymore since we use direct calculation
-        }
-      }, 40)
+        // Animate the progress
+        let currentProgress = 0
+        const interval = setInterval(() => {
+          if (currentProgress >= userScore) {
+            clearInterval(interval)
+            animationCompleted.current = true
+            onAnimationComplete()
+          } else {
+            currentProgress += Math.ceil(userScore / 50) // Increment in steps
+            if (currentProgress > userScore) currentProgress = userScore
+            setScore(currentProgress)
+          }
+        }, 40)
 
-      return () => clearInterval(interval)
-    } else {
-      // If no animation, just set the score directly
-      setScore(userScore)
-      // No need to set progress state anymore
+        return () => clearInterval(interval)
+      } else {
+        // If no animation, just set the score directly
+        setScore(userScore)
+      }
     }
+
+    fetchAndSetScore()
   }, [showAnimation, onAnimationComplete])
 
   // Determine score color based on value

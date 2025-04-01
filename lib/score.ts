@@ -1,26 +1,59 @@
 // Credit score calculation and storage
 
+import { getUser, saveUser, updateUserScore } from './supabase'
+import { MiniKit } from '@worldcoin/minikit-js'
+
 // Get user's credit score
-export function getScore(): number {
-  // Check if user has a stored score
-  const storedScore = localStorage.getItem("worldscore_score")
+export async function getScore(): Promise<number> {
+  try {
+    if (!MiniKit.isInstalled() || !MiniKit.walletAddress) {
+      return getDefaultScore()
+    }
 
-  if (storedScore) {
-    return Number.parseInt(storedScore, 10)
+    const walletAddress = MiniKit.walletAddress
+    
+    // Try to get the user from the database
+    const user = await getUser(walletAddress)
+    
+    if (user) {
+      return user.credit_score
+    } else {
+      // New user - save default score
+      const defaultScore = getDefaultScore()
+      await saveUser({
+        wallet_address: walletAddress,
+        credit_score: defaultScore
+      })
+      return defaultScore
+    }
+  } catch (error) {
+    console.error('Error retrieving score:', error)
+    return getDefaultScore()
   }
-
-  // New users get a default score of 640
-  const defaultScore = 640
-  localStorage.setItem("worldscore_score", defaultScore.toString())
-
-  return defaultScore
 }
 
 // Update user's credit score
-export function updateScore(newScore: number): void {
-  // Ensure score is within valid range
-  const validScore = Math.max(300, Math.min(900, newScore))
-  localStorage.setItem("worldscore_score", validScore.toString())
+export async function updateScore(newScore: number): Promise<boolean> {
+  try {
+    if (!MiniKit.isInstalled() || !MiniKit.walletAddress) {
+      return false
+    }
+    
+    // Ensure score is within valid range
+    const validScore = Math.max(300, Math.min(900, newScore))
+    
+    // Update the score in the database
+    const updated = await updateUserScore(MiniKit.walletAddress, validScore)
+    return !!updated
+  } catch (error) {
+    console.error('Error updating score:', error)
+    return false
+  }
+}
+
+// Default score function - separate to make testing easier
+function getDefaultScore(): number {
+  return 640
 }
 
 // Calculate score based on various factors
