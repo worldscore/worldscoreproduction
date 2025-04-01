@@ -161,7 +161,7 @@ export default function CreditScore({ showAnimation, onAnimationComplete }: Cred
                 <ChevronDown className="h-3 w-3 text-yellow-500" />
               </div>
               <div className="absolute text-xs left-[73.5%] -translate-x-1/2 flex flex-col items-center">
-                <span>Very Good</span>
+                <span>V Good</span>
                 <ChevronDown className="h-3 w-3 text-green-500" />
               </div>
               <div className="absolute text-xs right-0 flex flex-col items-center">
