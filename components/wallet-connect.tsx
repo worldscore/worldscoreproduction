@@ -15,30 +15,39 @@ export default function WalletConnect({ onConnect }: WalletConnectProps) {
   const [error, setError] = useState<string | null>(null)
 
   const handleConnect = async () => {
+    console.log('handleConnect: Starting wallet connection process');
     setIsLoading(true)
     setError(null)
 
     try {
+      console.log('handleConnect: MiniKit installed:', MiniKit.isInstalled());
       if (!MiniKit.isInstalled()) {
+        console.log('handleConnect: MiniKit not installed');
         throw new Error("WorldScore requires World App to function. Please open it in World App.")
       }
 
       // Fetch a nonce from your backend
+      console.log('handleConnect: Fetching nonce from API');
       const res = await fetch('/api/nonce')
       const { nonce } = await res.json()
+      console.log('handleConnect: Received nonce:', nonce);
 
       // Request wallet authentication using SIWE (Sign-In with Ethereum)
+      console.log('handleConnect: Requesting wallet authentication');
       const { commandPayload, finalPayload } = await MiniKit.commandsAsync.walletAuth({
         nonce,
         expirationTime: new Date(new Date().getTime() + 7 * 24 * 60 * 60 * 1000), // 7 days
         statement: 'Sign in to WorldScore - a decentralized credit score app',
       })
 
+      console.log('handleConnect: Authentication response:', finalPayload);
       if (finalPayload.status === 'error') {
-        throw new Error(finalPayload.message || 'Authentication failed')
+        console.log('handleConnect: Authentication failed');
+        throw new Error('Authentication failed')
       }
 
       // Verify the SIWE message on your backend
+      console.log('handleConnect: Verifying SIWE message');
       const verifyRes = await fetch('/api/complete-siwe', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -49,11 +58,14 @@ export default function WalletConnect({ onConnect }: WalletConnectProps) {
       })
 
       const verification = await verifyRes.json()
+      console.log('handleConnect: Verification result:', verification);
       if (!verification.isValid) {
+        console.log('handleConnect: Signature verification failed');
         throw new Error('Signature verification failed')
       }
 
       // If everything is successful, call the onConnect callback
+      console.log('handleConnect: Authentication successful, wallet address:', finalPayload.address);
       onConnect()
     } catch (err) {
       console.error("Failed to connect wallet:", err)

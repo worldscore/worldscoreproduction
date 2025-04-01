@@ -8,25 +8,33 @@ export async function getScore(): Promise<number> {
   try {
     // For server-side rendering safety
     if (typeof window === 'undefined') {
+      console.log('getScore: Server-side rendering, returning default score');
       return 640; // Default score
     }
 
+    console.log('getScore: MiniKit installed:', MiniKit.isInstalled(), 'Wallet address:', MiniKit.walletAddress);
     if (!MiniKit.isInstalled() || !MiniKit.walletAddress) {
       // Fall back to localStorage if no wallet is connected
+      console.log('getScore: No wallet connected, checking localStorage');
       const localScore = localStorage.getItem("worldscore_score");
+      console.log('getScore: Local storage score:', localScore);
       return localScore ? Number.parseInt(localScore, 10) : 640;
     }
 
     const walletAddress = MiniKit.walletAddress;
+    console.log('getScore: Wallet connected with address:', walletAddress);
     
     // Try to get user from Firebase
+    console.log('getScore: Attempting to get user from Firebase');
     const user = await getUser(walletAddress);
     
     if (user) {
       // User exists in Firebase, return their score
+      console.log('getScore: User found, returning score:', user.creditScore);
       return user.creditScore;
     } else {
       // Create new user with default score
+      console.log('getScore: User not found, creating new user with default score');
       const defaultScore = 640;
       await saveUser({
         walletAddress,
@@ -36,6 +44,7 @@ export async function getScore(): Promise<number> {
       
       // Also save to localStorage as fallback
       localStorage.setItem("worldscore_score", defaultScore.toString());
+      console.log('getScore: Default score saved to localStorage:', defaultScore);
       
       return defaultScore;
     }
@@ -44,6 +53,7 @@ export async function getScore(): Promise<number> {
     
     // Fall back to localStorage if Firebase fails
     const localScore = localStorage.getItem("worldscore_score");
+    console.log('getScore (error fallback): Using localStorage score:', localScore);
     return localScore ? Number.parseInt(localScore, 10) : 640;
   }
 }
@@ -53,12 +63,16 @@ export async function updateScore(newScore: number): Promise<void> {
   try {
     // Ensure score is within valid range
     const validScore = Math.max(300, Math.min(900, newScore));
+    console.log('updateScore: Updating score to:', validScore);
     
     // Update localStorage as fallback
     localStorage.setItem("worldscore_score", validScore.toString());
+    console.log('updateScore: Updated localStorage with score:', validScore);
     
+    console.log('updateScore: MiniKit installed:', MiniKit.isInstalled(), 'Wallet address:', MiniKit.walletAddress);
     if (MiniKit.isInstalled() && MiniKit.walletAddress) {
       // If wallet is connected, update in Firebase too
+      console.log('updateScore: Updating score in Firebase for wallet:', MiniKit.walletAddress);
       await updateUserScore(MiniKit.walletAddress, validScore);
     }
   } catch (error) {

@@ -12,6 +12,11 @@ service cloud.firestore {
       allow create, update: if true;
     }
     
+    // Enable read/write access to the debug collection for testing
+    match /debug/{document=**} {
+      allow read, write: if true;
+    }
+    
     // Lock down other collections by default
     match /{document=**} {
       allow read, write: if false;

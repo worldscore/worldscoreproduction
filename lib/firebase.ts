@@ -17,6 +17,12 @@ const firebaseConfig = {
   measurementId: process.env.NEXT_PUBLIC_FIREBASE_MEASUREMENT_ID
 };
 
+console.log('Firebase config:', {
+  apiKey: process.env.NEXT_PUBLIC_FIREBASE_API_KEY,
+  authDomain: process.env.NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN,
+  projectId: process.env.NEXT_PUBLIC_FIREBASE_PROJECT_ID
+});
+
 // Initialize Firebase
 let app: FirebaseApp | undefined;
 let db: Firestore | undefined;
@@ -25,12 +31,16 @@ let auth: Auth | undefined;
 // Check if we are on the client side and if Firebase isn't already initialized
 if (typeof window !== 'undefined' && !getApps().length) {
   try {
+    console.log('Initializing Firebase on client side');
     app = initializeApp(firebaseConfig);
     db = getFirestore(app);
     auth = getAuth(app);
+    console.log('Firebase initialized successfully:', !!app, 'Firestore initialized:', !!db);
   } catch (error) {
     console.error('Firebase initialization error:', error);
   }
+} else {
+  console.log('Firebase not initialized: Window available:', typeof window !== 'undefined', 'Apps length:', getApps().length);
 }
 
 export { app, db, auth }; 
