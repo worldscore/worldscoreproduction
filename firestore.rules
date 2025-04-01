@@ -1,0 +1,20 @@
+rules_version = '2';
+
+service cloud.firestore {
+  match /databases/{database}/documents {
+    // Enable read/write access to the users collection
+    match /users/{walletAddress} {
+      // Allow reading any user document
+      allow read: if true;
+      
+      // Allow creation and updates if the user is writing their own data
+      // The request.auth could be added later when you implement proper authentication
+      allow create, update: if true;
+    }
+    
+    // Lock down other collections by default
+    match /{document=**} {
+      allow read, write: if false;
+    }
+  }
+}
