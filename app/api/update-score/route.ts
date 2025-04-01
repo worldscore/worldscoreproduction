@@ -1,17 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { updateScore } from '@/lib/score'
-import { cookies } from 'next/headers'
 
 export async function POST(req: NextRequest) {
-  // Verify user is authenticated
-  const walletAddress = cookies().get('wallet_address')?.value
-  if (!walletAddress) {
-    return NextResponse.json({ 
-      success: false, 
-      message: 'Unauthorized' 
-    }, { status: 401 })
-  }
-
   try {
     const { score } = await req.json()
     
@@ -22,18 +12,14 @@ export async function POST(req: NextRequest) {
       }, { status: 400 })
     }
 
-    const success = await updateScore(score)
-    
-    if (success) {
-      return NextResponse.json({ success: true })
-    } else {
-      return NextResponse.json({ 
-        success: false, 
-        message: 'Failed to update score' 
-      }, { status: 500 })
-    }
+    // Note: This won't actually update localStorage from the server
+    // The client should handle this directly
+    return NextResponse.json({ 
+      success: true,
+      message: 'Score received. Client should update localStorage.'
+    })
   } catch (error) {
-    console.error('Error updating score:', error)
+    console.error('Error handling score update:', error)
     return NextResponse.json({ 
       success: false, 
       message: 'Server error' 

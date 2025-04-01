@@ -1,59 +1,69 @@
 // Credit score calculation and storage
 
-import { getUser, saveUser, updateUserScore } from './supabase'
 import { MiniKit } from '@worldcoin/minikit-js'
+import { getUser, saveUser, updateUserScore, getLocalUser, saveLocalUser, updateLocalScore } from './firebase-db'
 
 // Get user's credit score
 export async function getScore(): Promise<number> {
   try {
-    if (!MiniKit.isInstalled() || !MiniKit.walletAddress) {
-      return getDefaultScore()
+    // For server-side rendering safety
+    if (typeof window === 'undefined') {
+      return 640; // Default score
     }
 
-    const walletAddress = MiniKit.walletAddress
+    if (!MiniKit.isInstalled() || !MiniKit.walletAddress) {
+      // Fall back to localStorage if no wallet is connected
+      const localScore = localStorage.getItem("worldscore_score");
+      return localScore ? Number.parseInt(localScore, 10) : 640;
+    }
+
+    const walletAddress = MiniKit.walletAddress;
     
-    // Try to get the user from the database
-    const user = await getUser(walletAddress)
+    // Try to get user from Firebase
+    const user = await getUser(walletAddress);
     
     if (user) {
-      return user.credit_score
+      // User exists in Firebase, return their score
+      return user.creditScore;
     } else {
-      // New user - save default score
-      const defaultScore = getDefaultScore()
+      // Create new user with default score
+      const defaultScore = 640;
       await saveUser({
-        wallet_address: walletAddress,
-        credit_score: defaultScore
-      })
-      return defaultScore
+        walletAddress,
+        creditScore: defaultScore,
+        updatedAt: new Date()
+      });
+      
+      // Also save to localStorage as fallback
+      localStorage.setItem("worldscore_score", defaultScore.toString());
+      
+      return defaultScore;
     }
   } catch (error) {
-    console.error('Error retrieving score:', error)
-    return getDefaultScore()
+    console.error('Error retrieving score:', error);
+    
+    // Fall back to localStorage if Firebase fails
+    const localScore = localStorage.getItem("worldscore_score");
+    return localScore ? Number.parseInt(localScore, 10) : 640;
   }
 }
 
 // Update user's credit score
-export async function updateScore(newScore: number): Promise<boolean> {
+export async function updateScore(newScore: number): Promise<void> {
   try {
-    if (!MiniKit.isInstalled() || !MiniKit.walletAddress) {
-      return false
-    }
-    
     // Ensure score is within valid range
-    const validScore = Math.max(300, Math.min(900, newScore))
+    const validScore = Math.max(300, Math.min(900, newScore));
     
-    // Update the score in the database
-    const updated = await updateUserScore(MiniKit.walletAddress, validScore)
-    return !!updated
+    // Update localStorage as fallback
+    localStorage.setItem("worldscore_score", validScore.toString());
+    
+    if (MiniKit.isInstalled() && MiniKit.walletAddress) {
+      // If wallet is connected, update in Firebase too
+      await updateUserScore(MiniKit.walletAddress, validScore);
+    }
   } catch (error) {
-    console.error('Error updating score:', error)
-    return false
+    console.error('Error updating score:', error);
   }
-}
-
-// Default score function - separate to make testing easier
-function getDefaultScore(): number {
-  return 640
 }
 
 // Calculate score based on various factors

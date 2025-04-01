@@ -18,36 +18,36 @@ export default function CreditScore({ showAnimation, onAnimationComplete }: Cred
   const today = format(new Date(), "MMM d, yyyy")
 
   useEffect(() => {
-    const fetchAndSetScore = async () => {
-      const userScore = await getScore()
+    const fetchScore = async () => {
+      const userScore = await getScore();
 
       if (showAnimation && !animationCompleted.current) {
         // Start with 0 and animate to the actual score
-        setScore(0)
+        setScore(0);
 
         // Animate the progress
-        let currentProgress = 0
+        let currentProgress = 0;
         const interval = setInterval(() => {
           if (currentProgress >= userScore) {
-            clearInterval(interval)
-            animationCompleted.current = true
-            onAnimationComplete()
+            clearInterval(interval);
+            animationCompleted.current = true;
+            onAnimationComplete();
           } else {
-            currentProgress += Math.ceil(userScore / 50) // Increment in steps
-            if (currentProgress > userScore) currentProgress = userScore
-            setScore(currentProgress)
+            currentProgress += Math.ceil(userScore / 50); // Increment in steps
+            if (currentProgress > userScore) currentProgress = userScore;
+            setScore(currentProgress);
           }
-        }, 40)
+        }, 40);
 
-        return () => clearInterval(interval)
+        return () => clearInterval(interval);
       } else {
         // If no animation, just set the score directly
-        setScore(userScore)
+        setScore(userScore);
       }
-    }
+    };
 
-    fetchAndSetScore()
-  }, [showAnimation, onAnimationComplete])
+    fetchScore();
+  }, [showAnimation, onAnimationComplete]);
 
   // Determine score color based on value
   const getScoreColor = () => {
