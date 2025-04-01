@@ -20,7 +20,7 @@ export default function WalletConnect({ onConnect }: WalletConnectProps) {
 
     try {
       if (!MiniKit.isInstalled()) {
-        throw new Error("World App is not installed or not accessible")
+        throw new Error("WorldScore requires World App to function. Please open it in World App.")
       }
 
       // Fetch a nonce from your backend
