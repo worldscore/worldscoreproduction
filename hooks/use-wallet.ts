@@ -1,35 +1,72 @@
 'use client'
 
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useCallback, useRef } from 'react'
 import { MiniKit } from '@worldcoin/minikit-js'
+import { saveUser } from '@/lib/firebase-db'
 
 export function useWallet() {
   const [isConnected, setIsConnected] = useState(false)
   const [address, setAddress] = useState<string | null>(null)
   const [isClient, setIsClient] = useState(false)
+  // Flag to track if we've already saved this wallet address to avoid duplicate saves
+  const savedWallets = useRef<Set<string>>(new Set());
+
+  // Create a function to save the user after wallet connection
+  const saveWalletUser = useCallback(async (walletAddress: string) => {
+    try {
+      // Skip if we've already saved this wallet to prevent duplicate/unnecessary operations
+      if (savedWallets.current.has(walletAddress)) {
+        return;
+      }
+      
+      // Mark this wallet as saved
+      savedWallets.current.add(walletAddress);
+      
+      await saveUser({
+        walletAddress,
+        creditScore: 640, // Default initial score
+        updatedAt: new Date(),
+        orbVerified: false,
+        metamaskConnected: false
+      });
+    } catch (error) {
+      console.error('Error saving user:', error);
+    }
+  }, []);
 
   useEffect(() => {
     // Set isClient to true once the component mounts
     setIsClient(true)
-    console.log('useWallet: Running client-side initialization');
     
     // Only run on client-side
     if (typeof window === 'undefined') {
-      console.log('useWallet: Running on server, exiting');
       return;
     }
     
-    // Check if wallet is already connected
-    const checkWalletConnection = () => {
-      console.log('checkWalletConnection: MiniKit installed:', MiniKit.isInstalled());
-      if (MiniKit.isInstalled()) {
-        console.log('checkWalletConnection: MiniKit wallet address:', MiniKit.walletAddress);
-      }
-      
+    // Immediately check if wallet is already connected
+    const immediateCheck = () => {
       if (MiniKit.isInstalled() && MiniKit.walletAddress) {
-        console.log('checkWalletConnection: Wallet connected:', MiniKit.walletAddress);
-        setIsConnected(true)
-        setAddress(MiniKit.walletAddress)
+        // Save user data immediately
+        saveWalletUser(MiniKit.walletAddress);
+      }
+    };
+    
+    // Run the immediate check
+    immediateCheck();
+    
+    // Check if wallet is already connected (for state updates)
+    const checkWalletConnection = () => {
+      if (MiniKit.isInstalled() && MiniKit.walletAddress) {
+        // If we have a wallet address, always immediately try to save it
+        if (!savedWallets.current.has(MiniKit.walletAddress)) {
+          saveWalletUser(MiniKit.walletAddress);
+        }
+        
+        // Only update state if the address has changed
+        if (!isConnected || address !== MiniKit.walletAddress) {
+          setIsConnected(true)
+          setAddress(MiniKit.walletAddress)
+        }
       }
     }
     
@@ -40,36 +77,35 @@ export function useWallet() {
     const interval = setInterval(checkWalletConnection, 1000)
     
     return () => clearInterval(interval)
-  }, [])
+  }, [isConnected, address, saveWalletUser])
 
   const connect = async () => {
     // Only run on client-side
     if (typeof window === 'undefined') {
-      console.log('connect: Running on server, returning null');
       return null;
     }
     
-    console.log('connect: Attempting to connect wallet');
     // This function is called by WalletConnect component
     // after successful authentication
     if (MiniKit.walletAddress) {
-      console.log('connect: Wallet connected with address:', MiniKit.walletAddress);
+      // Immediately save the wallet data
+      await saveWalletUser(MiniKit.walletAddress);
+      
+      // Then update the UI state
       setIsConnected(true)
       setAddress(MiniKit.walletAddress)
+      
       return MiniKit.walletAddress
     }
-    console.log('connect: No wallet address available');
     return null
   }
 
   const disconnect = async () => {
     // Only run on client-side
     if (typeof window === 'undefined') {
-      console.log('disconnect: Running on server, exiting');
       return;
     }
     
-    console.log('disconnect: Disconnecting wallet');
     // Update the state
     setIsConnected(false)
     setAddress(null)
@@ -77,7 +113,6 @@ export function useWallet() {
     // Clear cookies using document.cookie
     document.cookie = 'wallet_address=; expires=Thu, 01 Jan 1970 00:00:00 UTC; path=/;';
     document.cookie = 'siwe=; expires=Thu, 01 Jan 1970 00:00:00 UTC; path=/;';
-    console.log('disconnect: Cookies cleared');
     
     // Force reload the page to ensure all state is reset
     window.location.reload();

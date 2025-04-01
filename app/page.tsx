@@ -10,8 +10,6 @@ import { useWallet } from "@/hooks/use-wallet"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { Activity, CreditCard, PieChart, User } from "lucide-react"
 import AccountTasks from "@/components/account-tasks"
-import ClientOnly from "@/components/client-only"
-import LoadingUI from "@/components/loading-ui"
 
 // Dynamically import WalletConnect with SSR disabled to prevent Firebase initialization on server
 const WalletConnect = dynamic(() => import("@/components/wallet-connect"), { ssr: false })
@@ -30,112 +28,110 @@ export default function Home() {
           <p className="text-sm text-muted-foreground text-center">Decentralized Credit Score for the World</p>
         </div>
 
-        <ClientOnly fallback={<LoadingUI />}>
-          {!isConnected ? (
-            <WalletConnect onConnect={connect} />
-          ) : (
-            <>
-              <CreditScore showAnimation={showAnimation} onAnimationComplete={() => setShowAnimation(false)} />
+        {!isConnected ? (
+          <WalletConnect onConnect={connect} />
+        ) : (
+          <>
+            <CreditScore showAnimation={showAnimation} onAnimationComplete={() => setShowAnimation(false)} />
 
-              <Tabs defaultValue="overview" className="w-full">
-                <TabsList className="grid grid-cols-4 mb-4">
-                  <TabsTrigger value="overview">
-                    <PieChart className="h-4 w-4 mr-1" />
-                    <span className="sr-only sm:not-sr-only sm:ml-1">Overview</span>
-                  </TabsTrigger>
-                  <TabsTrigger value="activity">
-                    <Activity className="h-4 w-4 mr-1" />
-                    <span className="sr-only sm:not-sr-only sm:ml-1">Activity</span>
-                  </TabsTrigger>
-                  <TabsTrigger value="accounts">
-                    <CreditCard className="h-4 w-4 mr-1" />
-                    <span className="sr-only sm:not-sr-only sm:ml-1">Accounts</span>
-                  </TabsTrigger>
-                  <TabsTrigger value="profile">
-                    <User className="h-4 w-4 mr-1" />
-                    <span className="sr-only sm:not-sr-only sm:ml-1">Profile</span>
-                  </TabsTrigger>
-                </TabsList>
+            <Tabs defaultValue="overview" className="w-full">
+              <TabsList className="grid grid-cols-4 mb-4">
+                <TabsTrigger value="overview">
+                  <PieChart className="h-4 w-4 mr-1" />
+                  <span className="sr-only sm:not-sr-only sm:ml-1">Overview</span>
+                </TabsTrigger>
+                <TabsTrigger value="activity">
+                  <Activity className="h-4 w-4 mr-1" />
+                  <span className="sr-only sm:not-sr-only sm:ml-1">Activity</span>
+                </TabsTrigger>
+                <TabsTrigger value="accounts">
+                  <CreditCard className="h-4 w-4 mr-1" />
+                  <span className="sr-only sm:not-sr-only sm:ml-1">Accounts</span>
+                </TabsTrigger>
+                <TabsTrigger value="profile">
+                  <User className="h-4 w-4 mr-1" />
+                  <span className="sr-only sm:not-sr-only sm:ml-1">Profile</span>
+                </TabsTrigger>
+              </TabsList>
 
-                <TabsContent value="overview">
-                  <ScoreDetails />
-                </TabsContent>
+              <TabsContent value="overview">
+                <ScoreDetails />
+              </TabsContent>
 
-                <TabsContent value="activity">
+              <TabsContent value="activity">
+                <Card>
+                  <CardContent className="p-6">
+                    <h3 className="text-lg font-medium mb-4">Recent Activity</h3>
+                    <div className="space-y-4">
+                      <div className="flex justify-between items-center py-2 border-b">
+                        <div>
+                          <p className="font-medium">Wallet Connected</p>
+                          <p className="text-sm text-muted-foreground">Initial score generated</p>
+                        </div>
+                        <span className="text-sm text-muted-foreground">Just now</span>
+                      </div>
+                    </div>
+                  </CardContent>
+                </Card>
+              </TabsContent>
+
+              <TabsContent value="accounts">
+                <div className="space-y-4">
                   <Card>
                     <CardContent className="p-6">
-                      <h3 className="text-lg font-medium mb-4">Recent Activity</h3>
+                      <h3 className="text-lg font-medium mb-4">Linked Accounts</h3>
                       <div className="space-y-4">
                         <div className="flex justify-between items-center py-2 border-b">
                           <div>
-                            <p className="font-medium">Wallet Connected</p>
-                            <p className="text-sm text-muted-foreground">Initial score generated</p>
+                            <p className="font-medium">Worldcoin Wallet</p>
+                            <p className="text-sm text-muted-foreground truncate w-48">
+                              {address?.slice(0, 6)}...{address?.slice(-4)}
+                            </p>
                           </div>
-                          <span className="text-sm text-muted-foreground">Just now</span>
+                          <span className="text-xs px-2 py-1 bg-green-100 text-green-800 rounded-full">Primary</span>
                         </div>
                       </div>
                     </CardContent>
                   </Card>
-                </TabsContent>
 
-                <TabsContent value="accounts">
-                  <div className="space-y-4">
-                    <Card>
-                      <CardContent className="p-6">
-                        <h3 className="text-lg font-medium mb-4">Linked Accounts</h3>
-                        <div className="space-y-4">
-                          <div className="flex justify-between items-center py-2 border-b">
-                            <div>
-                              <p className="font-medium">Worldcoin Wallet</p>
-                              <p className="text-sm text-muted-foreground truncate w-48">
-                                {address?.slice(0, 6)}...{address?.slice(-4)}
-                              </p>
-                            </div>
-                            <span className="text-xs px-2 py-1 bg-green-100 text-green-800 rounded-full">Primary</span>
-                          </div>
-                        </div>
-                      </CardContent>
-                    </Card>
+                  <AccountTasks />
+                </div>
+              </TabsContent>
 
-                    <AccountTasks />
-                  </div>
-                </TabsContent>
-
-                <TabsContent value="profile">
-                  <Card>
-                    <CardContent className="p-6 space-y-4">
-                      <h3 className="text-lg font-medium">Your Profile</h3>
-                      <div className="space-y-2">
-                        <p className="text-sm font-medium">Wallet Address</p>
-                        <p className="text-sm text-muted-foreground break-all">{address}</p>
-                      </div>
-                      <Button 
-                        variant="destructive" 
-                        onClick={async () => {
-                          try {
-                            // First try to call server-side logout (may fail silently if endpoint doesn't exist)
-                            await fetch('/api/logout', { 
-                              method: 'POST',
-                              headers: { 'Content-Type': 'application/json' },
-                            }).catch(() => {
-                              // Ignore error if API route doesn't exist
-                            });
-                          } finally {
-                            // Always call client-side disconnect
-                            disconnect();
-                          }
-                        }} 
-                        className="w-full mt-4"
-                      >
-                        Disconnect Wallet
-                      </Button>
-                    </CardContent>
-                  </Card>
-                </TabsContent>
-              </Tabs>
-            </>
-          )}
-        </ClientOnly>
+              <TabsContent value="profile">
+                <Card>
+                  <CardContent className="p-6 space-y-4">
+                    <h3 className="text-lg font-medium">Your Profile</h3>
+                    <div className="space-y-2">
+                      <p className="text-sm font-medium">Wallet Address</p>
+                      <p className="text-sm text-muted-foreground break-all">{address}</p>
+                    </div>
+                    <Button 
+                      variant="destructive" 
+                      onClick={async () => {
+                        try {
+                          // First try to call server-side logout (may fail silently if endpoint doesn't exist)
+                          await fetch('/api/logout', { 
+                            method: 'POST',
+                            headers: { 'Content-Type': 'application/json' },
+                          }).catch(() => {
+                            // Ignore error if API route doesn't exist
+                          });
+                        } finally {
+                          // Always call client-side disconnect
+                          disconnect();
+                        }
+                      }} 
+                      className="w-full mt-4"
+                    >
+                      Disconnect Wallet
+                    </Button>
+                  </CardContent>
+                </Card>
+              </TabsContent>
+            </Tabs>
+          </>
+        )}
       </div>
     </main>
   )

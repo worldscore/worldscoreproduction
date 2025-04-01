@@ -1,4 +1,4 @@
-import { db } from './firebase';
+import { db, initializeFirebase } from './firebase';
 import { 
   collection, 
   doc, 
@@ -7,7 +7,9 @@ import {
   updateDoc, 
   CollectionReference,
   DocumentReference,
-  Firestore
+  Firestore,
+  serverTimestamp,
+  writeBatch
 } from 'firebase/firestore';
 
 // User type definition
@@ -19,69 +21,118 @@ export type User = {
   metamaskConnected?: boolean;
 }
 
-// Check if Firebase is available
-const isFirebaseAvailable = (): boolean => {
-  const available = typeof window !== 'undefined' && db !== undefined;
-  console.log('Firebase available:', available, 'db defined:', db !== undefined);
-  return available;
+// Queue for offline operations
+const pendingOperations: Array<{
+  type: 'save' | 'update',
+  data: any
+}> = [];
+
+// Try to reinitialize Firebase if needed
+const ensureFirebase = async (): Promise<boolean> => {
+  try {
+    // If db is already available, return true
+    if (db) return true;
+    
+    // Try to initialize
+    const { db: freshDb } = await initializeFirebase();
+    return !!freshDb;
+  } catch (error) {
+    console.error('Failed to ensure Firebase:', error);
+    return false;
+  }
 };
 
+// Process any pending operations when coming back online
+if (typeof window !== 'undefined') {
+  window.addEventListener('online', async () => {
+    if (pendingOperations.length > 0) {
+      const isAvailable = await ensureFirebase();
+      if (!isAvailable) return;
+      
+      const operations = [...pendingOperations];
+      pendingOperations.length = 0; // Clear the queue
+      
+      for (const op of operations) {
+        try {
+          if (op.type === 'save') {
+            await saveUser(op.data);
+          } else if (op.type === 'update') {
+            await updateUserScore(op.data.walletAddress, op.data.creditScore);
+          }
+        } catch (error) {
+          console.error('Error processing pending operation:', error);
+        }
+      }
+    }
+  });
+}
+
 // Safely get users collection
-const getUsersCollection = (): CollectionReference | null => {
-  if (!isFirebaseAvailable() || !db) {
-    console.log('getUsersCollection: Firebase not available or db is undefined');
+const getUsersCollection = async (): Promise<CollectionReference | null> => {
+  try {
+    // Check if Firebase is initialized, try to initialize if not
+    if (!db) {
+      const isAvailable = await ensureFirebase();
+      if (!isAvailable) return null;
+    }
+    
+    // If still not available after attempting initialization, return null
+    if (!db) return null;
+    
+    return collection(db, 'users');
+  } catch (error) {
+    console.error('Error getting collection:', error);
     return null;
   }
-  
-  console.log('getUsersCollection: Getting users collection');
-  return collection(db, 'users');
 };
 
 // Safely get user document reference
-const getUserDocRef = (walletAddress: string): DocumentReference | null => {
-  const usersCollection = getUsersCollection();
-  if (!usersCollection) {
-    console.log('getUserDocRef: Users collection not available');
+const getUserDocRef = async (walletAddress: string): Promise<DocumentReference | null> => {
+  try {
+    const usersCollection = await getUsersCollection();
+    if (!usersCollection) return null;
+    
+    return doc(usersCollection, walletAddress);
+  } catch (error) {
+    console.error('Error getting document reference:', error);
     return null;
   }
-  
-  console.log('getUserDocRef: Getting document reference for wallet', walletAddress);
-  return doc(usersCollection, walletAddress);
 };
 
 // Get a user by wallet address
 export async function getUser(walletAddress: string): Promise<User | null> {
-  console.log('getUser: Fetching user with wallet address', walletAddress);
   try {
-    // If Firebase is not available, fall back to local storage
-    if (!isFirebaseAvailable()) {
-      console.log('getUser: Firebase not available, falling back to local storage');
-      return getLocalUser(walletAddress);
+    // Always try in local storage first for maximum speed
+    const localUser = getLocalUser(walletAddress);
+    
+    // Try to get from Firestore
+    try {
+      const docRef = await getUserDocRef(walletAddress);
+      if (!docRef) return localUser;
+      
+      const userDoc = await getDoc(docRef);
+      
+      if (userDoc.exists()) {
+        const data = userDoc.data();
+        const firestoreUser = {
+          walletAddress: data.walletAddress,
+          creditScore: data.creditScore,
+          // Handle both server timestamp and Date objects
+          updatedAt: data.updatedAt?.toDate ? data.updatedAt.toDate() : new Date(data.updatedAt),
+          orbVerified: data.orbVerified,
+          metamaskConnected: data.metamaskConnected
+        };
+        
+        // Update local storage with the latest data
+        saveLocalUser(firestoreUser);
+        
+        return firestoreUser;
+      }
+    } catch (error) {
+      console.error('Error fetching document:', error);
     }
     
-    const docRef = getUserDocRef(walletAddress);
-    if (!docRef) {
-      console.log('getUser: Document reference not available, falling back to local storage');
-      return getLocalUser(walletAddress);
-    }
-    
-    console.log('getUser: Fetching document from Firestore');
-    const userDoc = await getDoc(docRef);
-    
-    if (userDoc.exists()) {
-      console.log('getUser: Document exists in Firestore', userDoc.data());
-      const data = userDoc.data();
-      return {
-        walletAddress: data.walletAddress,
-        creditScore: data.creditScore,
-        updatedAt: data.updatedAt.toDate(),
-        orbVerified: data.orbVerified,
-        metamaskConnected: data.metamaskConnected
-      };
-    }
-    
-    console.log('getUser: Document does not exist in Firestore, falling back to local storage');
-    return getLocalUser(walletAddress);
+    return localUser;
   } catch (error) {
     console.error('Error getting user:', error);
     return getLocalUser(walletAddress);
@@ -90,34 +141,40 @@ export async function getUser(walletAddress: string): Promise<User | null> {
 
 // Create or update a user
 export async function saveUser(user: User): Promise<boolean> {
-  console.log('saveUser: Attempting to save user', user);
   try {
-    // Always try local storage first for fallback
+    // Always save to local storage first for immediate access
     saveLocalUser(user);
     
-    // If Firebase is not available, return the local storage result
-    if (!isFirebaseAvailable()) {
-      console.log('saveUser: Firebase not available, using local storage only');
+    // Add to pending operations queue for offline support
+    pendingOperations.push({
+      type: 'save',
+      data: user
+    });
+    
+    // If we're offline, just return success from local storage
+    if (!navigator.onLine) {
       return true;
     }
     
-    const docRef = getUserDocRef(user.walletAddress);
-    if (!docRef) {
-      console.log('saveUser: Document reference not available, using local storage only');
-      return true; // Local storage succeeded
+    // Try to save to Firestore
+    const docRef = await getUserDocRef(user.walletAddress);
+    if (!docRef) return true; // Local storage succeeded
+    
+    try {
+      // Use serverTimestamp() for better synchronization
+      await setDoc(docRef, {
+        walletAddress: user.walletAddress,
+        creditScore: user.creditScore,
+        updatedAt: serverTimestamp(), // Use server timestamp for better consistency
+        orbVerified: user.orbVerified || false,
+        metamaskConnected: user.metamaskConnected || false
+      }, { merge: true }); // Use merge to prevent overwriting existing data
+      
+      return true;
+    } catch (error) {
+      console.error('Error saving document:', error);
+      return false;
     }
-    
-    console.log('saveUser: Saving document to Firestore');
-    await setDoc(docRef, {
-      walletAddress: user.walletAddress,
-      creditScore: user.creditScore,
-      updatedAt: user.updatedAt,
-      orbVerified: user.orbVerified || false,
-      metamaskConnected: user.metamaskConnected || false
-    });
-    
-    console.log('saveUser: User saved successfully to Firestore');
-    return true;
   } catch (error) {
     console.error('Error saving user:', error);
     return false;
@@ -126,44 +183,72 @@ export async function saveUser(user: User): Promise<boolean> {
 
 // Update a user's credit score
 export async function updateUserScore(walletAddress: string, creditScore: number): Promise<boolean> {
-  console.log('updateUserScore: Updating score for wallet', walletAddress, 'to', creditScore);
   try {
     // Always update local storage first
     updateLocalScore(walletAddress, creditScore);
     
-    // If Firebase is not available, return the local storage result
-    if (!isFirebaseAvailable()) {
-      console.log('updateUserScore: Firebase not available, using local storage only');
+    // Add to pending operations queue for offline support
+    pendingOperations.push({
+      type: 'update',
+      data: { walletAddress, creditScore }
+    });
+    
+    // If we're offline, just return success from local storage
+    if (!navigator.onLine) {
       return true;
     }
     
-    const docRef = getUserDocRef(walletAddress);
-    if (!docRef) {
-      console.log('updateUserScore: Document reference not available, using local storage only');
-      return true; // Local storage succeeded
+    const docRef = await getUserDocRef(walletAddress);
+    if (!docRef) return true; // Local storage succeeded
+    
+    try {
+      await updateDoc(docRef, {
+        creditScore,
+        updatedAt: serverTimestamp()
+      });
+      
+      return true;
+    } catch (error) {
+      console.error('Error updating document:', error);
+      
+      // Try to create the document if it doesn't exist
+      try {
+        return await saveUser({
+          walletAddress,
+          creditScore,
+          updatedAt: new Date()
+        });
+      } catch (createError) {
+        console.error('Error creating document:', createError);
+        return false;
+      }
     }
-    
-    console.log('updateUserScore: Updating document in Firestore');
-    await updateDoc(docRef, {
-      creditScore,
-      updatedAt: new Date()
-    });
-    
-    console.log('updateUserScore: Score updated successfully in Firestore');
-    return true;
   } catch (error) {
     console.error('Error updating user score:', error);
     return false;
   }
 }
 
-// Default functions that will work with localStorage until Firebase is set up
+// Default functions that will work with localStorage for offline first approach
 export const getLocalUser = (walletAddress: string): User | null => {
   if (typeof localStorage === 'undefined') return null;
   
   try {
+    // Try to get user-specific storage
+    const userDataJson = localStorage.getItem(`worldscore_user_${walletAddress}`);
+    if (userDataJson) {
+      const userData = JSON.parse(userDataJson);
+      return {
+        walletAddress: userData.walletAddress,
+        creditScore: userData.creditScore,
+        updatedAt: new Date(userData.updatedAt),
+        orbVerified: userData.orbVerified,
+        metamaskConnected: userData.metamaskConnected
+      };
+    }
+    
+    // Fall back to legacy storage
     const score = localStorage.getItem('worldscore_score');
-    console.log('getLocalUser: Local storage score for wallet', walletAddress, ':', score);
     if (!score) return null;
     
     return {
@@ -181,8 +266,18 @@ export const saveLocalUser = (user: User): boolean => {
   if (typeof localStorage === 'undefined') return false;
   
   try {
+    // Store full user data in more specific format
+    localStorage.setItem(`worldscore_user_${user.walletAddress}`, JSON.stringify({
+      walletAddress: user.walletAddress,
+      creditScore: user.creditScore,
+      updatedAt: user.updatedAt.toISOString(),
+      orbVerified: user.orbVerified || false,
+      metamaskConnected: user.metamaskConnected || false
+    }));
+    
+    // Also maintain legacy storage for backward compatibility
     localStorage.setItem('worldscore_score', user.creditScore.toString());
-    console.log('saveLocalUser: Saved score to local storage:', user.creditScore);
+    localStorage.setItem('worldscore_wallet', user.walletAddress);
     return true;
   } catch (error) {
     console.error('Error saving local user:', error);
@@ -194,8 +289,18 @@ export const updateLocalScore = (walletAddress: string, creditScore: number): bo
   if (typeof localStorage === 'undefined') return false;
   
   try {
+    // Update the user-specific storage if it exists
+    const userDataJson = localStorage.getItem(`worldscore_user_${walletAddress}`);
+    if (userDataJson) {
+      const userData = JSON.parse(userDataJson);
+      userData.creditScore = creditScore;
+      userData.updatedAt = new Date().toISOString();
+      localStorage.setItem(`worldscore_user_${walletAddress}`, JSON.stringify(userData));
+    }
+    
+    // Also update legacy storage
     localStorage.setItem('worldscore_score', creditScore.toString());
-    console.log('updateLocalScore: Updated score in local storage:', creditScore);
+    localStorage.setItem('worldscore_wallet', walletAddress);
     return true;
   } catch (error) {
     console.error('Error updating local score:', error);

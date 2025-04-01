@@ -1,6 +1,6 @@
 // Import the functions you need from the SDKs you need
-import { initializeApp, getApps, FirebaseApp } from "firebase/app";
-import { getFirestore, Firestore } from "firebase/firestore";
+import { initializeApp, getApps, FirebaseApp, getApp } from "firebase/app";
+import { getFirestore, Firestore, enableIndexedDbPersistence, CACHE_SIZE_UNLIMITED } from "firebase/firestore";
 import { getAuth, Auth } from "firebase/auth";
 
 // Your web app's Firebase configuration
@@ -17,30 +17,64 @@ const firebaseConfig = {
   measurementId: process.env.NEXT_PUBLIC_FIREBASE_MEASUREMENT_ID
 };
 
-console.log('Firebase config:', {
-  apiKey: process.env.NEXT_PUBLIC_FIREBASE_API_KEY,
-  authDomain: process.env.NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN,
-  projectId: process.env.NEXT_PUBLIC_FIREBASE_PROJECT_ID
-});
-
-// Initialize Firebase
+// Initialize Firebase with retry logic
 let app: FirebaseApp | undefined;
 let db: Firestore | undefined;
 let auth: Auth | undefined;
+let isInitialized = false;
 
-// Check if we are on the client side and if Firebase isn't already initialized
-if (typeof window !== 'undefined' && !getApps().length) {
+/**
+ * Initialize Firebase safely with retry mechanism
+ * This ensures that even if initialization fails initially, it can be retried
+ */
+const initializeFirebase = async () => {
+  // Skip if already initialized or not in browser
+  if (isInitialized || typeof window === 'undefined') {
+    return { app, db, auth };
+  }
+  
   try {
-    console.log('Initializing Firebase on client side');
-    app = initializeApp(firebaseConfig);
+    // Initialize or get the existing Firebase app
+    if (!getApps().length) {
+      app = initializeApp(firebaseConfig);
+    } else {
+      app = getApp();
+    }
+    
+    // Get Firestore instance with optimized settings for mobile
     db = getFirestore(app);
+    
+    // Enable offline persistence with unlimited cache size for better mobile experience
+    try {
+      await enableIndexedDbPersistence(db).catch((err) => {
+        if (err.code === 'failed-precondition') {
+          console.warn('Multiple tabs open, persistence can only be enabled in one tab at a time.');
+        } else if (err.code === 'unimplemented') {
+          console.warn('The current browser does not support all of the features required to enable persistence');
+        }
+      });
+    } catch (error) {
+      console.error('Error attempting to enable persistence:', error);
+      // Continue even if persistence enabling fails - basic functionality should still work
+    }
+    
+    // Get Auth instance
     auth = getAuth(app);
-    console.log('Firebase initialized successfully:', !!app, 'Firestore initialized:', !!db);
+    
+    // Mark as initialized
+    isInitialized = true;
+    
+    return { app, db, auth };
   } catch (error) {
     console.error('Firebase initialization error:', error);
+    // Return undefined instances so callers can handle fallback gracefully
+    return { app: undefined, db: undefined, auth: undefined };
   }
-} else {
-  console.log('Firebase not initialized: Window available:', typeof window !== 'undefined', 'Apps length:', getApps().length);
+};
+
+// Initialize immediately in client
+if (typeof window !== 'undefined') {
+  initializeFirebase().catch(console.error);
 }
 
-export { app, db, auth }; 
+export { app, db, auth, initializeFirebase }; 
