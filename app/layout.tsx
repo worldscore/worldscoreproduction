@@ -4,6 +4,7 @@ import "./globals.css"
 import { Inter } from "next/font/google"
 import { Toaster } from "@/components/toaster"
 import MiniKitProvider from '@/components/minikit-provider'
+import { ThemeProvider } from "@/components/theme-provider"
 
 const inter = Inter({ subsets: ["latin"] })
 
@@ -19,15 +20,15 @@ export default function RootLayout({
   children: React.ReactNode
 }) {
   return (
-    <html lang="en">
+    <html lang="en" suppressHydrationWarning>
       <body className={inter.className}>
-        <MiniKitProvider>
-          {children}
-        </MiniKitProvider>
-        <Toaster />
+        <ThemeProvider attribute="class" defaultTheme="dark" enableSystem>
+          <MiniKitProvider>
+            {children}
+          </MiniKitProvider>
+          <Toaster />
+        </ThemeProvider>
       </body>
     </html>
   )
 }
-
-import './globals.css'

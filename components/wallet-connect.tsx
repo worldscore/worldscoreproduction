@@ -6,6 +6,7 @@ import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle }
 import { Wallet, Info, Shield } from "lucide-react"
 import { MiniKit } from "@worldcoin/minikit-js"
 import { saveUser } from "@/lib/firebase-db"
+import { ModeToggle } from "@/components/ui/mode-toggle"
 
 interface WalletConnectProps {
   onConnect: () => void
@@ -202,7 +203,10 @@ export default function WalletConnect({ onConnect }: WalletConnectProps) {
         <Button className="w-full" size="lg" onClick={handleConnect} disabled={isLoading}>
           {isLoading ? "Connecting..." : "Connect World Wallet"}
         </Button>
-        <span className="text-xs text-muted-foreground">V: 1.0.0</span>
+        <div className="flex justify-between items-center w-full">
+          <span className="text-xs text-muted-foreground">V: 1.0.0</span>
+          <ModeToggle />
+        </div>
       </CardFooter>
     </Card>
   )
